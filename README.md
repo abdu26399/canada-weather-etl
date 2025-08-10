@@ -8,7 +8,6 @@ End to end ETL that collects weather data for Canadian cities using OpenWeather,
 - [Features](#features)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
-- [Repository Structure](#repository-structure)
 
 ## Overview
 
@@ -51,23 +50,3 @@ This project pulls current, hourly, and daily forecasts for five Canadian cities
 - Azure SQL Database
 - GitHub Actions
 - Power BI Desktop and Service
-
-## Repository Structure
-
-weather-pipeline/
-├─ config/
-│ ├─ config.yaml.example 
-│ └─ config.yaml 
-├─ scripts/
-│ ├─ extract.py # API calls
-│ ├─ transform.py # flatten and cleaning
-│ ├─ load.py # engine, staging, merge
-│ └─ secrets_kv.py # Key Vault helper
-├─ tests/
-│ └─ test_transform.py
-├─ .github/
-│ └─ workflows/
-│ └─ run.yml # scheduled CI job
-├─ requirements.txt
-├─ main.py
-└─ README.md
