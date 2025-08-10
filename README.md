@@ -9,19 +9,6 @@ End to end ETL that collects weather data for Canadian cities using OpenWeather,
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Repository Structure](#repository-structure)
-- [Setup](#setup)
-  - [Prerequisites](#prerequisites)
-  - [Create Virtual Environment](#create-virtual-environment)
-  - [Install Dependencies](#install-dependencies)
-- [Configuration](#configuration)
-- [Run Locally](#run-locally)
-- [Azure SQL Schema](#azure-sql-schema)
-- [Scheduling With GitHub Actions](#scheduling-with-github-actions)
-- [Power BI](#power-bi)
-- [Troubleshooting](#troubleshooting)
-- [Roadmap](#roadmap)
-- [License](#license)
-- [Disclaimer](#disclaimer)
 
 ## Overview
 
