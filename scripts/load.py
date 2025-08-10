@@ -1,5 +1,4 @@
 import os
-
 import pyodbc
 from sqlalchemy import create_engine
 import pandas as pd
@@ -8,15 +7,23 @@ from typing import Literal
 
 
 def make_engine(server: str, database: str, username: str, password: str):
-    # Ensure the driver exists on the system
+    # Ensure the ODBC driver is actually installed
     available_drivers = pyodbc.drivers()
-    driver_env = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-    if driver_env not in available_drivers:
-        raise RuntimeError(f"ODBC driver '{driver_env}' not found. Installed: {available_drivers}")
+    driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
+    if driver not in available_drivers:
+        raise RuntimeError(f"ODBC driver '{driver}' not found. Installed: {available_drivers}")
 
+    # Normalize server: accept either logical name or full FQDN
+    server = server.strip()
+    if server.lower().endswith(".database.windows.net"):
+        host = server
+    else:
+        host = f"{server}.database.windows.net"
+
+    # Build DSN (note the tcp: prefix)
     params = quote_plus(
-        f"DRIVER={{{driver_env}}};"
-        f"SERVER={server}.database.windows.net,1433;"
+        f"DRIVER={{{driver}}};"
+        f"SERVER=tcp:{host},1433;"
         f"DATABASE={database};"
         f"UID={username};"
         f"PWD={password};"

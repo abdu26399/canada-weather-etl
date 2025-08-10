@@ -97,5 +97,4 @@ jobs:
           az sql server firewall-rule delete `
             -g "${{ secrets.AZURE_RESOURCE_GROUP }}" `
             -s "${{ secrets.AZURE_SQL_SERVER }}" `
-            -n $rule `
-            --yes
+            -n $rule
