@@ -12,8 +12,8 @@ jobs:
     env:
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}
-      AZURE_ODBC_DRIVER: "ODBC Driver 18 for SQL Server"
-      # AZURE_ODBC_DRIVER: "ODBC Driver 17 for SQL Server"
+    #  AZURE_ODBC_DRIVER: "ODBC Driver 18 for SQL Server"
+      AZURE_ODBC_DRIVER: "ODBC Driver 17 for SQL Server"
 
     steps:
       - name: Checkout
@@ -24,16 +24,19 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Microsoft ODBC Driver 18
-        shell: pwsh
-        run: |
-          winget install --id Microsoft.MicrosoftODBCDriver18 -e --silent --accept-source-agreements --accept-package-agreements
-
       - name: Install dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Show available ODBC drivers (debug)
+        shell: pwsh
+        run: |
+          python - << 'PY'
+          import pyodbc
+          print("ODBC drivers:", pyodbc.drivers())
+          PY
 
       - name: Generate runtime config
         shell: pwsh
