@@ -32,11 +32,7 @@ jobs:
 
       - name: Show available ODBC drivers (debug)
         shell: pwsh
-        run: |
-          python - << 'PY'
-          import pyodbc
-          print("ODBC drivers:", pyodbc.drivers())
-          PY
+        run: python -c "import pyodbc; print('ODBC drivers:', pyodbc.drivers())"
 
       - name: Generate runtime config
         shell: pwsh
