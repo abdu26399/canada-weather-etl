@@ -3,7 +3,7 @@ name: Weather ETL (Windows)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */6 * * *"  # every 6 hours (UTC)
 
 jobs:
   run-etl:
@@ -13,13 +13,14 @@ jobs:
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}
-      AZURE_SQL_DATABASE:  ${{ secrets.AZURE_SQL_DATABASE }}
-      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}
-      AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}
+      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}       # logical server (NO .database.windows.net)
+      AZURE_SQL_DATABASE:  ${{ secrets.AZURE_SQL_DATABASE }}     # database name
+      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}     # SQL login (not your Azure email)
+      AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}     # SQL login password
       AZURE_ODBC_DRIVER:   "ODBC Driver 17 for SQL Server"
 
     steps:
+      # --- Repo & Azure auth ---
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -28,6 +29,28 @@ jobs:
         with:
           creds: ${{ env.AZURE_CREDENTIALS }}
 
+      - name: Show Azure subscription (debug)
+        shell: pwsh
+        run: az account show --output table
+
+      # --- Ensure server allows public access ---
+      - name: Ensure SQL Public Network Access is Enabled
+        shell: pwsh
+        run: |
+          az sql server update `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -n "${{ env.AZURE_SQL_SERVER }}" `
+            --public-network-access Enabled
+
+      - name: Check SQL Public Network Access (debug)
+        shell: pwsh
+        run: |
+          az sql server show `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -n "${{ env.AZURE_SQL_SERVER }}" `
+            --query publicNetworkAccess -o tsv
+
+      # --- Networking prep & diagnostics ---
       - name: Get runner public IP
         id: ip
         shell: pwsh
@@ -46,7 +69,30 @@ jobs:
             -n $rule `
             --start-ip-address "${{ steps.ip.outputs.ip }}" `
             --end-ip-address   "${{ steps.ip.outputs.ip }}"
+          az sql server firewall-rule show `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -s "${{ env.AZURE_SQL_SERVER }}" `
+            -n $rule -o table
+          Start-Sleep -Seconds 20   # give the rule a moment to propagate
 
+      - name: DNS + TCP 1433 test (debug)
+        shell: pwsh
+        run: |
+          $fqdn = "${{ env.AZURE_SQL_SERVER }}.database.windows.net"
+          Write-Host "FQDN: $fqdn"
+          Resolve-DnsName $fqdn
+          Test-NetConnection -ComputerName $fqdn -Port 1433
+
+      - name: Confirm DB exists (debug)
+        shell: pwsh
+        run: |
+          az sql db show `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -s "${{ env.AZURE_SQL_SERVER }}" `
+            -n "${{ env.AZURE_SQL_DATABASE }}" `
+            --query status -o tsv
+
+      # --- Python setup & dependencies ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -58,10 +104,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Show available ODBC drivers
+      - name: Show available ODBC drivers (debug)
         shell: pwsh
         run: python -c "import pyodbc; print('ODBC drivers:', pyodbc.drivers())"
 
+      # --- Build runtime config from template (no secrets committed) ---
       - name: Generate runtime config
         shell: pwsh
         run: |
@@ -74,11 +121,12 @@ jobs:
             -replace 'PUT_AZURE_SQL_PASSWORD',  "$env:AZURE_SQL_PASSWORD" `
             | Set-Content config\config.yaml
 
-      # Instead of embedding Python here, just run a separate file
+      # --- Probe connectivity with same creds (separate file lives in repo) ---
       - name: PyODBC quick probe (debug)
         shell: pwsh
-        run: python scripts/debug_odbc.py
+        run: python scripts\debug_odbc.py
 
+      # --- Your tests & ETL ---
       - name: Run tests
         shell: pwsh
         run: pytest -q tests -vv
@@ -87,6 +135,7 @@ jobs:
         shell: pwsh
         run: python main.py
 
+      # --- Always clean up the firewall rule ---
       - name: Close SQL firewall (cleanup)
         if: always()
         shell: pwsh

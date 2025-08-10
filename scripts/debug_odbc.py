@@ -1,6 +1,6 @@
 import os
-import pyodbc
 import sys
+import pyodbc
 
 driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 server = os.environ["AZURE_SQL_SERVER"].strip()
@@ -17,7 +17,7 @@ dsn = (
     f"Pwd={pwd};"
     "Encrypt=yes;"
     "TrustServerCertificate=no;"
-    "Connection Timeout=30;"
+    "Connection Timeout=60;"
 )
 
 print("DSN (redacted):", dsn.replace(pwd, "***"))
