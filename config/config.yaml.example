@@ -1,0 +1,19 @@
+openweather:
+  api_key: "7a927494863b04093b79d0d9765c034e"
+
+api:
+  units: "metric"
+  exclude: "minutely,alerts"
+
+cities:
+  - Toronto
+  - Vancouver
+  - Montreal
+  - Ottawa
+  - Calgary
+
+azure_sql:
+  server: "canada-weather-sql.database.windows.net"
+  database: "canada-weather-sql"
+  username: "ahmed26399@canada-weather-sql"
+  password: "My Password"
