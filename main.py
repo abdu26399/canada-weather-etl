@@ -43,7 +43,7 @@ def main():
         password=az["password"],
     )
     write_weather(df, engine, table="WeatherDataClean", if_exists="replace")
-    print("Loaded into Azure SQL ✓")
+    print("Loaded into Azure SQL OK")
 
 
 if __name__ == "__main__":
