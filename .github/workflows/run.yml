@@ -3,7 +3,7 @@ name: Weather ETL (Windows)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours
+    - cron: "0 */6 * * *"  # every 6 hours (UTC)
 
 jobs:
   run-etl:
@@ -12,12 +12,43 @@ jobs:
     env:
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}
-    #  AZURE_ODBC_DRIVER: "ODBC Driver 18 for SQL Server"
+      # If your code reads this env to build the pyodbc conn string, keep it:
       AZURE_ODBC_DRIVER: "ODBC Driver 17 for SQL Server"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get runner public IP
+        id: ip
+        shell: pwsh
+        run: |
+          $ip = (Invoke-RestMethod -Uri "https://api.ipify.org")
+          "ip=$ip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Runner IP: $ip"
+
+      - name: Open SQL firewall for this run
+        shell: pwsh
+        run: |
+          $rule = "gha-${{ github.run_id }}"
+          az sql server firewall-rule create `
+            -g "${{ secrets.AZURE_RESOURCE_GROUP }}" `
+            -s "${{ secrets.AZURE_SQL_SERVER }}" `
+            -n $rule `
+            --start-ip-address "${{ steps.ip.outputs.ip }}" `
+            --end-ip-address   "${{ steps.ip.outputs.ip }}"
+
+      # (Optional) quick connectivity sanity check to 1433
+      - name: Check TCP 1433 connectivity (debug)
+        shell: pwsh
+        run: |
+          $fqdn = "${{ secrets.AZURE_SQL_SERVER }}.database.windows.net"
+          Test-NetConnection -ComputerName $fqdn -Port 1433
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,3 +88,14 @@ jobs:
       - name: Run ETL
         shell: pwsh
         run: python main.py
+
+      - name: Close SQL firewall (cleanup)
+        if: always()
+        shell: pwsh
+        run: |
+          $rule = "gha-${{ github.run_id }}"
+          az sql server firewall-rule delete `
+            -g "${{ secrets.AZURE_RESOURCE_GROUP }}" `
+            -s "${{ secrets.AZURE_SQL_SERVER }}" `
+            -n $rule `
+            --yes
