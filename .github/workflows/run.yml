@@ -1,0 +1,53 @@
+name: Weather ETL (Windows)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours
+
+jobs:
+  run-etl:
+    runs-on: windows-latest
+
+    env:
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}
+      AZURE_ODBC_DRIVER: "ODBC Driver 18 for SQL Server"
+      # AZURE_ODBC_DRIVER: "ODBC Driver 17 for SQL Server"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Microsoft ODBC Driver 18
+        shell: pwsh
+        run: |
+          winget install --id Microsoft.MicrosoftODBCDriver18 -e --silent --accept-source-agreements --accept-package-agreements
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate runtime config
+        shell: pwsh
+        run: |
+          Copy-Item config\config.yaml.example config\config.yaml
+          $c = Get-Content config\config.yaml -Raw
+          $c = $c -replace 'PUT_OPENWEATHER_API_KEY', "$env:OPENWEATHER_API_KEY"
+          $c = $c -replace 'PUT_AZURE_SQL_PASSWORD', "$env:AZURE_SQL_PASSWORD"
+          Set-Content -Path config\config.yaml -Value $c
+
+      - name: Run tests
+        shell: pwsh
+        run: pytest -q
+
+      - name: Run ETL
+        shell: pwsh
+        run: python main.py
