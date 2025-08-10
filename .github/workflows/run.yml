@@ -3,27 +3,23 @@ name: Weather ETL (Windows)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"  # every 6 hours (UTC)
+    - cron: "0 */6 * * *"
 
 jobs:
   run-etl:
     runs-on: windows-latest
 
     env:
-      # --- Required secrets (add in Repo → Settings → Secrets and variables → Actions) ---
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}       # logical server name (NO .database.windows.net)
-      AZURE_SQL_DATABASE:  ${{ secrets.AZURE_SQL_DATABASE }}     # database name
-      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}     # SQL login (not your Azure email)
-      AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}     # SQL login password
-
-      # ODBC driver consumed by your load.py
-      AZURE_ODBC_DRIVER: "ODBC Driver 17 for SQL Server"
+      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}
+      AZURE_SQL_DATABASE:  ${{ secrets.AZURE_SQL_DATABASE }}
+      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}
+      AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}
+      AZURE_ODBC_DRIVER:   "ODBC Driver 17 for SQL Server"
 
     steps:
-      # --- Repo & Azure auth ---
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -32,11 +28,6 @@ jobs:
         with:
           creds: ${{ env.AZURE_CREDENTIALS }}
 
-      - name: Show Azure subscription (debug)
-        shell: pwsh
-        run: az account show --output table
-
-      # --- Networking prep & diagnostics ---
       - name: Get runner public IP
         id: ip
         shell: pwsh
@@ -56,30 +47,6 @@ jobs:
             --start-ip-address "${{ steps.ip.outputs.ip }}" `
             --end-ip-address   "${{ steps.ip.outputs.ip }}"
 
-      - name: Check SQL Public Network Access (debug)
-        shell: pwsh
-        run: |
-          az sql server show `
-            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
-            -n "${{ env.AZURE_SQL_SERVER }}" `
-            --query publicNetworkAccess -o tsv
-
-      - name: List SQL firewall rules (debug)
-        shell: pwsh
-        run: |
-          az sql server firewall-rule list `
-            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
-            -s "${{ env.AZURE_SQL_SERVER }}" -o table
-
-      - name: DNS + TCP 1433 test (debug)
-        shell: pwsh
-        run: |
-          $fqdn = "${{ env.AZURE_SQL_SERVER }}.database.windows.net"
-          Write-Host "FQDN: $fqdn"
-          Resolve-DnsName $fqdn
-          Test-NetConnection -ComputerName $fqdn -Port 1433
-
-      # --- Python setup & dependencies ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -91,11 +58,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Show available ODBC drivers (debug)
+      - name: Show available ODBC drivers
         shell: pwsh
         run: python -c "import pyodbc; print('ODBC drivers:', pyodbc.drivers())"
 
-      # --- Build runtime config from template (no secrets committed) ---
       - name: Generate runtime config
         shell: pwsh
         run: |
@@ -108,31 +74,11 @@ jobs:
             -replace 'PUT_AZURE_SQL_PASSWORD',  "$env:AZURE_SQL_PASSWORD" `
             | Set-Content config\config.yaml
 
-      # --- Quick pyodbc probe using same creds (pinpoints timeouts) ---
+      # Instead of embedding Python here, just run a separate file
       - name: PyODBC quick probe (debug)
         shell: pwsh
-        run: |
-          python - << 'PY'
-          import os, pyodbc, sys
-          driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-          server = os.environ["AZURE_SQL_SERVER"].strip()
-          host = server if server.lower().endswith(".database.windows.net") else f"{server}.database.windows.net"
-          db   = os.environ.get("AZURE_SQL_DATABASE", "master")
-          uid  = os.environ["AZURE_SQL_USERNAME"]
-          pwd  = os.environ["AZURE_SQL_PASSWORD"]
-          dsn  = f"Driver={{{driver}}};Server=tcp:{host},1433;Database={db};Uid={uid};Pwd={pwd};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-          print("DSN (redacted):", dsn.replace(pwd, "***"))
-          try:
-              with pyodbc.connect(dsn) as cn:
-                  cur = cn.cursor()
-                  cur.execute("SELECT DB_NAME()")
-                  print("Connected OK; DB_NAME():", cur.fetchone()[0])
-          except Exception:
-              import traceback; traceback.print_exc()
-              sys.exit(1)
-          PY
+        run: python scripts/debug_odbc.py
 
-      # --- Your tests & ETL ---
       - name: Run tests
         shell: pwsh
         run: pytest -q tests -vv
@@ -141,7 +87,6 @@ jobs:
         shell: pwsh
         run: python main.py
 
-      # --- Always clean up the firewall rule ---
       - name: Close SQL firewall (cleanup)
         if: always()
         shell: pwsh
