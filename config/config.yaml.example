@@ -1,5 +1,5 @@
 openweather:
-  api_key: "7a927494863b04093b79d0d9765c034e"
+  api_key: PUT_OPENWEATHER_API_KEY
 
 api:
   units: "metric"
@@ -13,7 +13,8 @@ cities:
   - Calgary
 
 azure_sql:
-  server: "canada-weather-sql.database.windows.net"
-  database: "canada-weather-sql"
-  username: "ahmed26399@canada-weather-sql"
-  password: "My Password"
+  # logical server name OR full FQDN both okay
+  server:   PUT_AZURE_SQL_SERVER
+  database: PUT_AZURE_SQL_DATABASE
+  username: PUT_AZURE_SQL_USERNAME
+  password: PUT_AZURE_SQL_PASSWORD

@@ -7,20 +7,15 @@ from typing import Literal
 
 
 def make_engine(server: str, database: str, username: str, password: str):
-    # Ensure the ODBC driver is actually installed
-    available_drivers = pyodbc.drivers()
+    # Ensure ODBC driver is present
+    available = pyodbc.drivers()
     driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-    if driver not in available_drivers:
-        raise RuntimeError(f"ODBC driver '{driver}' not found. Installed: {available_drivers}")
+    if driver not in available:
+        raise RuntimeError(f"ODBC driver '{driver}' not found. Installed: {available}")
 
-    # Normalize server: accept either logical name or full FQDN
     server = server.strip()
-    if server.lower().endswith(".database.windows.net"):
-        host = server
-    else:
-        host = f"{server}.database.windows.net"
+    host = server if server.lower().endswith(".database.windows.net") else f"{server}.database.windows.net"
 
-    # Build DSN (note the tcp: prefix)
     params = quote_plus(
         f"DRIVER={{{driver}}};"
         f"SERVER=tcp:{host},1433;"
@@ -29,7 +24,7 @@ def make_engine(server: str, database: str, username: str, password: str):
         f"PWD={password};"
         "Encrypt=yes;"
         "TrustServerCertificate=no;"
-        "Connection Timeout=30;"
+        "Connection Timeout=60;"
     )
     return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 
