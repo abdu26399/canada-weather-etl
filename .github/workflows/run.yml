@@ -20,7 +20,6 @@ jobs:
       AZURE_ODBC_DRIVER:   "ODBC Driver 17 for SQL Server"
 
     steps:
-      # --- Repo & Azure auth ---
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -33,14 +32,20 @@ jobs:
         shell: pwsh
         run: az account show --output table
 
-      # --- Ensure server allows public access ---
+      - name: Show SQL Server info (debug)
+        shell: pwsh
+        run: |
+          az sql server show `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -n "${{ env.AZURE_SQL_SERVER }}"
+
       - name: Ensure SQL Public Network Access is Enabled
         shell: pwsh
         run: |
           az sql server update `
             -g "${{ env.AZURE_RESOURCE_GROUP }}" `
             -n "${{ env.AZURE_SQL_SERVER }}" `
-            --public-network-access Enabled
+            --set publicNetworkAccess=Enabled
 
       - name: Check SQL Public Network Access (debug)
         shell: pwsh
@@ -50,7 +55,6 @@ jobs:
             -n "${{ env.AZURE_SQL_SERVER }}" `
             --query publicNetworkAccess -o tsv
 
-      # --- Networking prep & diagnostics ---
       - name: Get runner public IP
         id: ip
         shell: pwsh
@@ -73,7 +77,14 @@ jobs:
             -g "${{ env.AZURE_RESOURCE_GROUP }}" `
             -s "${{ env.AZURE_SQL_SERVER }}" `
             -n $rule -o table
-          Start-Sleep -Seconds 20   # give the rule a moment to propagate
+          Start-Sleep -Seconds 20
+
+      - name: List SQL firewall rules (debug)
+        shell: pwsh
+        run: |
+          az sql server firewall-rule list `
+            -g "${{ env.AZURE_RESOURCE_GROUP }}" `
+            -s "${{ env.AZURE_SQL_SERVER }}" -o table
 
       - name: DNS + TCP 1433 test (debug)
         shell: pwsh
@@ -92,7 +103,6 @@ jobs:
             -n "${{ env.AZURE_SQL_DATABASE }}" `
             --query status -o tsv
 
-      # --- Python setup & dependencies ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -108,7 +118,6 @@ jobs:
         shell: pwsh
         run: python -c "import pyodbc; print('ODBC drivers:', pyodbc.drivers())"
 
-      # --- Build runtime config from template (no secrets committed) ---
       - name: Generate runtime config
         shell: pwsh
         run: |
@@ -121,12 +130,10 @@ jobs:
             -replace 'PUT_AZURE_SQL_PASSWORD',  "$env:AZURE_SQL_PASSWORD" `
             | Set-Content config\config.yaml
 
-      # --- Probe connectivity with same creds (separate file lives in repo) ---
       - name: PyODBC quick probe (debug)
         shell: pwsh
         run: python scripts\debug_odbc.py
 
-      # --- Your tests & ETL ---
       - name: Run tests
         shell: pwsh
         run: pytest -q tests -vv
@@ -135,7 +142,6 @@ jobs:
         shell: pwsh
         run: python main.py
 
-      # --- Always clean up the firewall rule ---
       - name: Close SQL firewall (cleanup)
         if: always()
         shell: pwsh
