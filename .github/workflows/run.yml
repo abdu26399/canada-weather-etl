@@ -43,10 +43,16 @@ jobs:
           $c = $c -replace 'PUT_AZURE_SQL_PASSWORD', "$env:AZURE_SQL_PASSWORD"
           Set-Content -Path config\config.yaml -Value $c
 
-      - name: Run tests (if any)
+      - name: Show repo files (debug)
         shell: pwsh
-        continue-on-error: true
-        run: pytest -q
+        run: |
+          git rev-parse --abbrev-ref HEAD
+          git status
+          Get-ChildItem -Recurse
+
+      - name: Run tests
+        shell: pwsh
+        run: pytest -q tests -vv
 
       - name: Run ETL
         shell: pwsh
