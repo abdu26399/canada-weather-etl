@@ -42,7 +42,7 @@ def main():
         username=az["username"],
         password=az["password"],
     )
-    write_weather(df, engine, table="WeatherDataClean", if_exists="replace")
+    write_weather(df, engine, table="WeatherDataClean", schema="dbo")
     print("Loaded into Azure SQL OK")
 
 
