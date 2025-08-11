@@ -33,42 +33,36 @@ def make_engine(server: str, database: str, username: str, password: str):
 
 
 def write_weather(
-        df: pd.DataFrame,
-        engine,
-        table: str = "WeatherDataClean",
-        schema: str = "dbo",
-        if_exists: Literal["fail", "replace", "append"] = "append",
+    df: pd.DataFrame,
+    engine,
+    table: str = "WeatherDataClean",
+    schema: str = "dbo",
+    if_exists: Literal["fail", "replace", "append"] = "append",
 ) -> None:
     insp = inspect(engine)
 
-    # Cast a few columns, so they line up with your existing schema
-    # (humidity, wind_deg are BIGINT; timestamp/source_time are datetime)
-    if "humidity" in df.columns:
-        df["humidity"] = pd.to_numeric(df["humidity"], errors="coerce").astype("Int64")
-    if "wind_deg" in df.columns:
-        df["wind_deg"] = pd.to_numeric(df["wind_deg"], errors="coerce").astype("Int64")
-    for col in ("timestamp", "source_time"):
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], utc=False, errors="coerce")
-
-    # Keep column order consistent with the existing table (optional but nice)
     if insp.has_table(table, schema=schema):
+        # Get all existing city+timestamp combos from DB
         with engine.connect() as conn:
-            # noinspection SqlNoDataSourceInspection
-            cols = conn.execute(text(f"""
-                SELECT c.name
-                FROM sys.columns c
-                JOIN sys.objects o ON o.object_id = c.object_id
-                JOIN sys.schemas s ON s.schema_id = o.schema_id
-                WHERE s.name = :schema AND o.name = :table
-                ORDER BY c.column_id
-            """), {"schema": schema, "table": table}).scalars().all()
-        df = df[[c for c in cols if c in df.columns]]
+            existing_pairs = pd.DataFrame(conn.execute(
+                text(f"SELECT city, [timestamp] FROM {schema}.{table}")
+            ).fetchall(), columns=["city", "timestamp"])
 
-        # TRUNCATE + APPEND (no schema change)
-        with engine.begin() as conn:
-            conn.execute(text(f"TRUNCATE TABLE {schema}.{table}"))
-        df.to_sql(table, con=engine, schema=schema, if_exists="append", index=False)
+        # Ensure timestamp types match
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=False, errors="coerce")
+        existing_pairs["timestamp"] = pd.to_datetime(existing_pairs["timestamp"], utc=False, errors="coerce")
+
+        # Keep only rows not already present
+        merged = df.merge(existing_pairs, on=["city", "timestamp"], how="left", indicator=True)
+        new_data = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
+
+        if new_data.empty:
+            print("✅ No new city/timestamp data to insert.")
+            return
+
+        print(f"Appending {len(new_data)} new rows...")
+        new_data.to_sql(table, con=engine, schema=schema, if_exists="append", index=False)
+
     else:
-        # First-ever run: create the table
+        print("Table does not exist — creating it with all data.")
         df.to_sql(table, con=engine, schema=schema, if_exists="fail", index=False)
