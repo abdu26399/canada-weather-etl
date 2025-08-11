@@ -7,6 +7,9 @@ from typing import Literal
 
 
 def make_engine(server: str, database: str, username: str, password: str):
+    import os, pyodbc
+    from urllib.parse import quote_plus
+
     # Ensure ODBC driver is present
     available = pyodbc.drivers()
     driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
@@ -18,7 +21,7 @@ def make_engine(server: str, database: str, username: str, password: str):
 
     params = quote_plus(
         f"DRIVER={{{driver}}};"
-        f"SERVER=tcp:{host},1433;"
+        f"SERVER={host},1433;"  # Removed tcp:
         f"DATABASE={database};"
         f"UID={username};"
         f"PWD={password};"
