@@ -1,9 +1,9 @@
 name: Weather ETL (Windows)
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 */6 * * *"  # every 6 hours (UTC)
+#on:
+#  workflow_dispatch:
+#  schedule:
+#    - cron: "0 */6 * * *"  # every 6 hours (UTC)
 
 jobs:
   run-etl:
