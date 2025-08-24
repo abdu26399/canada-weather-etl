@@ -8,26 +8,37 @@ from typing import Literal
 
 def make_engine(server: str, database: str, username: str, password: str):
     drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
-    driver = "ODBC Driver 18 for SQL Server" if any("18" in d for d in drivers) else "ODBC Driver 17 for SQL Server"
+    has18 = any("18" in d for d in drivers)
+    has17 = any("17" in d for d in drivers)
 
-    # URL-escape user & pass
     user_esc = quote_plus(username)
     pass_esc = quote_plus(password)
-    drv_esc = driver.replace(" ", "+")  # URL form
 
-    # URL-style connection string
-    url = (
-        f"mssql+pyodbc://{user_esc}:{pass_esc}@{server}:1433/{database}"
-        f"?driver={drv_esc}&Encrypt=yes&TrustServerCertificate=no&ConnectionTimeout=30"
-    )
+    def build_url(driver_label: str) -> str:
+        drv_q = driver_label.replace(" ", "+")
+        # IMPORTANT: 'Connection Timeout' must be URL-encoded as 'Connection+Timeout'
+        return (
+            f"mssql+pyodbc://{user_esc}:{pass_esc}@{server}:1433/{database}"
+            f"?driver={drv_q}"
+            f"&Encrypt=yes"
+            f"&TrustServerCertificate=no"
+            f"&Connection+Timeout=30"
+        )
 
-    eng = create_engine(url, pool_pre_ping=True, pool_recycle=1800)
+    last_err = None
+    for drv in ([ "ODBC Driver 18 for SQL Server"] if has18 else []) + \
+               ([ "ODBC Driver 17 for SQL Server"] if has17 else []):
+        try:
+            url = build_url(drv)
+            eng = create_engine(url, pool_pre_ping=True, pool_recycle=1800)
+            # sanity check: fail fast with a tiny query
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return eng
+        except Exception as e:
+            last_err = e
 
-    # sanity check
-    with eng.connect() as conn:
-        conn.execute(text("SELECT 1"))
-
-    return eng
+    raise RuntimeError(f"Could not connect with available drivers {drivers}. Last error: {repr(last_err)}")
 
 
 def write_weather(

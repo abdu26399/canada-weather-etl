@@ -43,6 +43,8 @@ def main():
     df = pd.concat(frames, ignore_index=True)
     print(f"Extracted rows: {len(df)}")
 
+    df = df[df["temp_unified"].notna()].copy()  # dropping rows with no usable temp
+
     # Load
     az = cfg["azure_sql"]
     engine = make_engine(
