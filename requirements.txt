@@ -6,3 +6,4 @@ pyodbc
 pytest
 azure-identity
 azure-keyvault-secrets
+dotenv

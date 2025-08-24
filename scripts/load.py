@@ -7,29 +7,27 @@ from typing import Literal
 
 
 def make_engine(server: str, database: str, username: str, password: str):
-    import os, pyodbc
-    from urllib.parse import quote_plus
+    drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
+    driver = "ODBC Driver 18 for SQL Server" if any("18" in d for d in drivers) else "ODBC Driver 17 for SQL Server"
 
-    # Ensure ODBC driver is present
-    available = pyodbc.drivers()
-    driver = os.getenv("AZURE_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
-    if driver not in available:
-        raise RuntimeError(f"ODBC driver '{driver}' not found. Installed: {available}")
+    # URL-escape user & pass
+    user_esc = quote_plus(username)
+    pass_esc = quote_plus(password)
+    drv_esc = driver.replace(" ", "+")  # URL form
 
-    server = server.strip()
-    host = server if server.lower().endswith(".database.windows.net") else f"{server}.database.windows.net"
-
-    params = quote_plus(
-        f"DRIVER={{{driver}}};"
-        f"SERVER={host},1433;"  # Removed tcp:
-        f"DATABASE={database};"
-        f"UID={username};"
-        f"PWD={password};"
-        "Encrypt=yes;"
-        "TrustServerCertificate=no;"
-        "Connection Timeout=60;"
+    # URL-style connection string
+    url = (
+        f"mssql+pyodbc://{user_esc}:{pass_esc}@{server}:1433/{database}"
+        f"?driver={drv_esc}&Encrypt=yes&TrustServerCertificate=no&ConnectionTimeout=30"
     )
-    return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
+
+    eng = create_engine(url, pool_pre_ping=True, pool_recycle=1800)
+
+    # sanity check
+    with eng.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+    return eng
 
 
 def write_weather(
@@ -37,22 +35,21 @@ def write_weather(
     engine,
     table: str = "WeatherDataClean",
     schema: str = "dbo",
-    if_exists: Literal["fail", "replace", "append"] = "append",
 ) -> None:
     insp = inspect(engine)
 
     if insp.has_table(table, schema=schema):
-        # Get all existing city+timestamp combos from DB
+        # Get all existing city and timestamp combos from database
         with engine.connect() as conn:
             existing_pairs = pd.DataFrame(conn.execute(
                 text(f"SELECT city, [timestamp] FROM {schema}.{table}")
             ).fetchall(), columns=["city", "timestamp"])
 
-        # Ensure timestamp types match
+        #  timestamp types matching
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=False, errors="coerce")
         existing_pairs["timestamp"] = pd.to_datetime(existing_pairs["timestamp"], utc=False, errors="coerce")
 
-        # Keep only rows not already present
+        # Keeping only rows not already present
         merged = df.merge(existing_pairs, on=["city", "timestamp"], how="left", indicator=True)
         new_data = merged[merged["_merge"] == "left_only"].drop(columns="_merge")
 

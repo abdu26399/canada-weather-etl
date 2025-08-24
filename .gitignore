@@ -1,4 +1,8 @@
 __pycache__/
 *.pyc
+
+# Local secrets
 .env
+
+# Real config stays local
 config/config.yaml

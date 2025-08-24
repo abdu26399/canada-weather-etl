@@ -13,9 +13,9 @@ jobs:
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       AZURE_CREDENTIALS:   ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}       # logical server (NO .database.windows.net)
+      AZURE_SQL_SERVER:    ${{ secrets.AZURE_SQL_SERVER }}       # logical server
       AZURE_SQL_DATABASE:  ${{ secrets.AZURE_SQL_DATABASE }}     # database name
-      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}     # SQL login (not your Azure email)
+      AZURE_SQL_USERNAME:  ${{ secrets.AZURE_SQL_USERNAME }}     # SQL login
       AZURE_SQL_PASSWORD:  ${{ secrets.AZURE_SQL_PASSWORD }}     # SQL login password
       AZURE_ODBC_DRIVER:   "ODBC Driver 17 for SQL Server"
 
